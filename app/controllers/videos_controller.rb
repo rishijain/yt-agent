@@ -177,11 +177,11 @@ class VideosController < ApplicationController
   end
 
   def calculate_max_chapters(video_duration_seconds)
-    # Rule: 5 chapters per 30 minutes (1800 seconds)
-    # Formula: (duration / 1800) * 5, rounded up to ensure we don't go below the minimum
-    return 5 if video_duration_seconds <= 1800 # Minimum 5 chapters for videos up to 30 mins
+    # Rule: 10 chapters per 30 minutes (1800 seconds)
+    # Formula: (duration / 1800) * 10, rounded up to ensure we don't go below the minimum
+    return 10 if video_duration_seconds <= 1800 # Maximum 10 chapters for videos up to 30 mins
     
-    chapters_per_30_min = 5
+    chapters_per_30_min = 10
     thirty_minutes = 1800
     
     (video_duration_seconds / thirty_minutes * chapters_per_30_min).ceil
