@@ -1,25 +1,20 @@
 class Agent::Prompt
-  def self.basic_prompt(content)
-    <<~PROMPT
-      Please analyze the following content:
-      
-      #{content}
-    PROMPT
-  end
-
   def self.analysis_prompt(content)
     <<~PROMPT
-      Please provide a detailed analysis of the following content. Include key themes, writing style, and main points:
-      
-      #{content}
-    PROMPT
-  end
+      You are given a full transcript of a video as a JSON array of objects
+      with "start" (seconds) and "text" fields with the language of the video.
 
-  def self.question_prompt(content)
-    <<~PROMPT
-      Based on the following content, generate 3-5 thoughtful questions that would help someone better understand the topic:
-      
+      Your job: Split it into YouTube chapters. Each chapter should have:
+      - "name": a short, purely descriptive title
+      - "timestamp": in mm:ss format from the "start" field of the first line in that chapter
+
+      The language of the output should match the language of the input.
+      Output JSON only, no commentary.
+
+      Here is the input json:
       #{content}
+
+      The output should be a JSON array of objects with "name" and "timestamp" fields.
     PROMPT
   end
 end

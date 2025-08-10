@@ -9,6 +9,10 @@ Rails.application.routes.draw do
   get "videos/:video_id/transcript/:language", to: "videos#transcript"
   get "videos/:video_id/transcript", to: "videos#transcript"
 
+  # Video chapters API
+  get "videos/:video_id/chapters/:language", to: "videos#chapters"
+  get "videos/:video_id/chapters", to: "videos#chapters"
+
   # Defines the root path route ("/")
   # root "posts#index"
 end
