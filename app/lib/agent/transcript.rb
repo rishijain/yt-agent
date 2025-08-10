@@ -11,7 +11,11 @@ class Agent::Transcript
   def chat_with_prompt(prompt_type, content, options = {})
     case prompt_type
     when :analysis
-      prompt = @prompt.send("#{prompt_type}_prompt", content, options[:max_chapters])
+      prompt = @prompt.analysis_prompt(content, options[:max_chapters])
+    when :review
+      prompt = @prompt.review_prompt(content, options[:generated_chapters])
+    when :regeneration
+      prompt = @prompt.regeneration_prompt(content, options[:max_chapters], options[:review_feedback])
     else
       prompt = @prompt.send("#{prompt_type}_prompt", content)
     end
