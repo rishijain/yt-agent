@@ -42,9 +42,21 @@ class VideosController < ApplicationController
       # Filter and prepare data for LLM
       filtered_transcript = filter_transcript_for_chapters(transcript_data)
 
+      # Calculate video duration and determine chapter limit
+      video_duration = calculate_video_duration(filtered_transcript)
+      max_chapters = calculate_max_chapters(video_duration)
+
       # Send to LLM for chapter generation
       agent = Agent::Transcript.new
-      chapters_response = agent.chat_with_prompt(:analysis, filtered_transcript.to_json)
+      
+      begin
+        chapters_response = agent.chat_with_prompt(:analysis, filtered_transcript.to_json, max_chapters: max_chapters)
+      rescue => llm_error
+        Rails.logger.error "LLM call failed: #{llm_error.message}"
+        
+        # Return a fallback response
+        chapters_response = '[{"name": "Introduction", "timestamp": "00:00", "start_seconds": 0}]'
+      end
 
       # Parse the JSON response from LLM (handle markdown code blocks)
       chapters = parse_llm_json_response(chapters_response)
@@ -95,8 +107,10 @@ class VideosController < ApplicationController
     # If it's a hash containing transcript data, extract the array
     if transcript_data.is_a?(Hash)
       # Look for common keys that might contain the transcript array
-      transcript_array = transcript_data['transcript'] ||
+      transcript_array = transcript_data.dig('transcript', 'snippets') ||
+                        transcript_data['transcript'] ||
                         transcript_data['segments'] ||
+                        transcript_data['snippets'] ||
                         transcript_data['data'] ||
                         transcript_data
 
@@ -121,6 +135,65 @@ class VideosController < ApplicationController
     end
 
     # Parse the cleaned JSON
-    JSON.parse(cleaned_response.strip)
+    chapters = JSON.parse(cleaned_response.strip)
+    
+    # Validate and fix each chapter
+    chapters.map do |chapter|
+      validate_and_fix_chapter(chapter)
+    end
+  end
+
+  def validate_and_fix_chapter(chapter)
+    # Ensure required fields exist with defaults
+    fixed_chapter = {
+      'name' => chapter['name'] || 'Untitled Chapter',
+      'timestamp' => chapter['timestamp'] || '00:00',
+      'start_seconds' => chapter['start_seconds'] || 0
+    }
+
+    # Fix any NaN or undefined values
+    if fixed_chapter['name'] == 'undefined' || fixed_chapter['name'].nil?
+      fixed_chapter['name'] = 'Untitled Chapter'
+    end
+
+    if fixed_chapter['timestamp'] == 'NaN:NaN' || fixed_chapter['timestamp'].nil?
+      # Try to generate timestamp from start_seconds
+      seconds = fixed_chapter['start_seconds'].to_i
+      minutes = seconds / 60
+      remaining_seconds = seconds % 60
+      fixed_chapter['timestamp'] = sprintf("%02d:%02d", minutes, remaining_seconds)
+    end
+
+    # Ensure start_seconds is a valid number
+    unless fixed_chapter['start_seconds'].is_a?(Numeric)
+      fixed_chapter['start_seconds'] = 0
+    end
+
+    fixed_chapter
+  end
+
+  def calculate_video_duration(transcript_array)
+    return 0 unless transcript_array.is_a?(Array) && transcript_array.any?
+
+    # Find the last segment and calculate total duration
+    last_segment = transcript_array.last
+    return 0 unless last_segment.is_a?(Hash)
+
+    # Total duration = start time of last segment + duration of last segment
+    last_start = last_segment['start'].to_f
+    last_duration = last_segment['duration'].to_f
+    
+    last_start + last_duration
+  end
+
+  def calculate_max_chapters(video_duration_seconds)
+    # Rule: 5 chapters per 30 minutes (1800 seconds)
+    # Formula: (duration / 1800) * 5, rounded up to ensure we don't go below the minimum
+    return 5 if video_duration_seconds <= 1800 # Minimum 5 chapters for videos up to 30 mins
+    
+    chapters_per_30_min = 5
+    thirty_minutes = 1800
+    
+    (video_duration_seconds / thirty_minutes * chapters_per_30_min).ceil
   end
 end
