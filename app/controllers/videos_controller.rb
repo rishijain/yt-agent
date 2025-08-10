@@ -228,12 +228,20 @@ class VideosController < ApplicationController
       end
 
       # Regenerate chapters based on review feedback
-      Rails.logger.info "Regenerating chapters (attempt #{current_attempt + 1}/#{max_attempts})"
+      # Use reviewer's recommended chapter count if provided, otherwise keep original limit
+      recommended_count = review_data["recommended_chapter_count"]
+      regeneration_max_chapters = recommended_count || max_chapters
+      
+      if recommended_count && recommended_count != max_chapters
+        Rails.logger.info "Reviewer recommended #{recommended_count} chapters (was #{max_chapters})"
+      end
+      
+      Rails.logger.info "Regenerating chapters (attempt #{current_attempt + 1}/#{max_attempts}) with max #{regeneration_max_chapters} chapters"
       begin
         regeneration_response = agent.chat_with_prompt(
           :regeneration, 
           filtered_transcript.to_json, 
-          max_chapters: max_chapters, 
+          max_chapters: regeneration_max_chapters, 
           review_feedback: review_data
         )
         chapters = parse_llm_json_response(regeneration_response)

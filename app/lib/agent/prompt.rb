@@ -69,8 +69,13 @@ class Agent::Prompt
           ],
           "regeneration_guidance": "How to improve chapter generation if rework is needed"
         },
-        "recommended_chapter_count": number_or_null
+        "recommended_chapter_count": 5
       }
+
+      For recommended_chapter_count:
+      - Use an actual number (e.g., 3, 5, 8) if you recommend a different chapter count
+      - Use null if the current number of chapters is appropriate
+      - Base your recommendation on content structure and natural topic boundaries
 
       Be thorough but concise. Focus on actionable feedback.
     PROMPT
