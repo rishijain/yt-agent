@@ -5,6 +5,10 @@ Rails.application.routes.draw do
   # Can be used by load balancers and uptime monitors to verify that the app is live.
   get "up" => "rails/health#show", as: :rails_health_check
 
+  # Video transcript API
+  get "videos/:video_id/transcript/:language", to: "videos#transcript"
+  get "videos/:video_id/transcript", to: "videos#transcript"
+
   # Defines the root path route ("/")
   # root "posts#index"
 end
