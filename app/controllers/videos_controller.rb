@@ -125,7 +125,7 @@ class VideosController < ApplicationController
     transcript_data
   end
 
-  def parse_llm_json_response(response)
+  def parse_llm_json_response(response, transcript_data = nil)
     # Remove markdown code blocks if present
     cleaned_response = response.strip
 
@@ -139,13 +139,13 @@ class VideosController < ApplicationController
     # Parse the cleaned JSON
     chapters = JSON.parse(cleaned_response.strip)
     
-    # Validate and fix each chapter
+    # Validate and fix each chapter, mapping to nearest valid timestamps
     chapters.map do |chapter|
-      validate_and_fix_chapter(chapter)
+      validate_and_fix_chapter(chapter, transcript_data)
     end
   end
 
-  def validate_and_fix_chapter(chapter)
+  def validate_and_fix_chapter(chapter, transcript_data = nil)
     # Ensure required fields exist with defaults
     fixed_chapter = {
       'name' => chapter['name'] || 'Untitled Chapter',
@@ -161,6 +161,33 @@ class VideosController < ApplicationController
     # Ensure start_seconds is a valid number first
     unless fixed_chapter['start_seconds'].is_a?(Numeric)
       fixed_chapter['start_seconds'] = 0
+    end
+
+    # Map to nearest valid timestamp if transcript data is provided
+    if transcript_data.is_a?(Array) && transcript_data.any?
+      original_start = fixed_chapter['start_seconds'].to_f
+      valid_timestamps = transcript_data.map { |snippet| snippet['start'].to_f }.sort
+      max_allowed = valid_timestamps.last
+      
+      # If the LLM-generated timestamp exceeds video duration or is invalid
+      if original_start > max_allowed || original_start < 0
+        # Find the nearest valid timestamp
+        nearest_timestamp = valid_timestamps.min_by { |t| (t - original_start).abs }
+        
+        Rails.logger.info "Mapped invalid timestamp #{original_start}s to nearest valid #{nearest_timestamp}s for chapter '#{fixed_chapter['name']}'"
+        fixed_chapter['start_seconds'] = nearest_timestamp
+      else
+        # Find the closest valid timestamp to the LLM's suggestion
+        nearest_timestamp = valid_timestamps.min_by { |t| (t - original_start).abs }
+        
+        # Only map if it's more than 5 seconds off (to avoid unnecessary changes)
+        if (nearest_timestamp - original_start).abs > 5
+          Rails.logger.info "Mapped approximate timestamp #{original_start}s to nearest valid #{nearest_timestamp}s for chapter '#{fixed_chapter['name']}'"
+          fixed_chapter['start_seconds'] = nearest_timestamp
+        else
+          fixed_chapter['start_seconds'] = nearest_timestamp
+        end
+      end
     end
 
     # Always regenerate timestamp from start_seconds to ensure consistency
@@ -186,7 +213,7 @@ class VideosController < ApplicationController
     # Initial chapter generation
     begin
       chapters_response = agent.chat_with_prompt(:analysis, filtered_transcript.to_json, video_title: video_title)
-      chapters = parse_llm_json_response(chapters_response)
+      chapters = parse_llm_json_response(chapters_response, filtered_transcript)
     rescue => llm_error
       Rails.logger.error "LLM call failed: #{llm_error.message}"
       chapters = [{"name" => "Introduction", "timestamp" => "00:00", "start_seconds" => 0}]
@@ -229,7 +256,7 @@ class VideosController < ApplicationController
           review_feedback: review_data,
           video_title: video_title
         )
-        chapters = parse_llm_json_response(regeneration_response)
+        chapters = parse_llm_json_response(regeneration_response, filtered_transcript)
       rescue => regeneration_error
         Rails.logger.error "Chapter regeneration failed: #{regeneration_error.message}"
         # Keep existing chapters if regeneration fails

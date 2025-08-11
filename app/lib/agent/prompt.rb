@@ -31,12 +31,10 @@ class Agent::Prompt
       - "timestamp": convert the "start" seconds value to mm:ss format (e.g., if start is 125 seconds, timestamp should be "02:05")
       - "start_seconds": the exact start time in seconds from the transcript (must match the "start" value from transcript data)
 
-      CRITICAL: Ensure timestamp accuracy by:
-      1. Using EXACT "start" values from the transcript data for "start_seconds" - DO NOT invent timestamps
-      2. Converting start_seconds accurately to mm:ss format for "timestamp"
-      3. Analyzing the transcript content at specific timestamps to ensure chapters match the actual content timing
-      4. Each chapter should represent content that actually occurs at that timestamp in the video
-      5. ONLY use start_seconds values that exist in the provided transcript array - never exceed the video length
+      Guidelines for chapter creation:
+      1. Focus on identifying major content themes and natural topic transitions
+      2. Provide approximate timing in start_seconds (will be automatically mapped to actual transcript timestamps)
+      3. Ensure chapter names reflect the actual content discussed at those times
 
       Rules for timestamp conversion:
       - Convert seconds to minutes and seconds precisely
@@ -164,12 +162,10 @@ class Agent::Prompt
       - "timestamp": convert the "start" seconds value to mm:ss format (e.g., if start is 125 seconds, timestamp should be "02:05")
       - "start_seconds": the exact start time in seconds from the transcript (must match the "start" value from transcript data)
 
-      CRITICAL: Ensure timestamp accuracy by:
-      1. Using EXACT "start" values from the transcript data for "start_seconds" - DO NOT invent timestamps
-      2. Converting start_seconds accurately to mm:ss format for "timestamp"
-      3. Analyzing the transcript content at specific timestamps to ensure chapters match the actual content timing
-      4. Each chapter should represent content that actually occurs at that timestamp in the video
-      5. ONLY use start_seconds values that exist in the provided transcript array - never exceed the video length
+      Guidelines for chapter creation:
+      1. Focus on identifying major content themes and natural topic transitions
+      2. Provide approximate timing in start_seconds (will be automatically mapped to actual transcript timestamps)
+      3. Ensure chapter names reflect the actual content discussed at those times
 
       Rules for timestamp conversion:
       - Convert seconds to minutes and seconds precisely
