@@ -146,16 +146,20 @@ class VideosController < ApplicationController
       fixed_chapter['name'] = 'Untitled Chapter'
     end
 
-    if fixed_chapter['timestamp'] == 'NaN:NaN' || fixed_chapter['timestamp'].nil?
-      # Try to generate timestamp from start_seconds
-      seconds = fixed_chapter['start_seconds'].to_i
-      minutes = seconds / 60
-      remaining_seconds = seconds % 60
-      fixed_chapter['timestamp'] = sprintf("%02d:%02d", minutes, remaining_seconds)
+    # Ensure start_seconds is a valid number first
+    unless fixed_chapter['start_seconds'].is_a?(Numeric)
+      fixed_chapter['start_seconds'] = 0
     end
 
-    # Ensure start_seconds is a valid number
-    unless fixed_chapter['start_seconds'].is_a?(Numeric)
+    # Always regenerate timestamp from start_seconds to ensure consistency
+    seconds = fixed_chapter['start_seconds'].to_f.round
+    minutes = seconds / 60
+    remaining_seconds = seconds % 60
+    fixed_chapter['timestamp'] = sprintf("%02d:%02d", minutes, remaining_seconds)
+
+    # Validate timestamp format matches expected pattern
+    unless fixed_chapter['timestamp'].match?(/^\d{2}:\d{2}$/)
+      fixed_chapter['timestamp'] = '00:00'
       fixed_chapter['start_seconds'] = 0
     end
 
@@ -172,7 +176,7 @@ class VideosController < ApplicationController
     # Total duration = start time of last segment + duration of last segment
     last_start = last_segment['start'].to_f
     last_duration = last_segment['duration'].to_f
-    
+
     last_start + last_duration
   end
 
@@ -180,17 +184,17 @@ class VideosController < ApplicationController
     # Rule: 10 chapters per 30 minutes (1800 seconds)
     # Formula: (duration / 1800) * 10, rounded up to ensure we don't go below the minimum
     return 10 if video_duration_seconds <= 1800 # Maximum 10 chapters for videos up to 30 mins
-    
+
     chapters_per_30_min = 10
     thirty_minutes = 1800
-    
+
     (video_duration_seconds / thirty_minutes * chapters_per_30_min).ceil
   end
 
   def generate_chapters_with_review(agent, filtered_transcript, max_chapters)
-    max_attempts = 3
+    max_attempts = 1
     current_attempt = 1
-    
+
     # Initial chapter generation
     begin
       chapters_response = agent.chat_with_prompt(:analysis, filtered_transcript.to_json, max_chapters: max_chapters)
@@ -231,17 +235,17 @@ class VideosController < ApplicationController
       # Use reviewer's recommended chapter count if provided, otherwise keep original limit
       recommended_count = review_data["recommended_chapter_count"]
       regeneration_max_chapters = recommended_count || max_chapters
-      
+
       if recommended_count && recommended_count != max_chapters
         Rails.logger.info "Reviewer recommended #{recommended_count} chapters (was #{max_chapters})"
       end
-      
+
       Rails.logger.info "Regenerating chapters (attempt #{current_attempt + 1}/#{max_attempts}) with max #{regeneration_max_chapters} chapters"
       begin
         regeneration_response = agent.chat_with_prompt(
-          :regeneration, 
-          filtered_transcript.to_json, 
-          max_chapters: regeneration_max_chapters, 
+          :regeneration,
+          filtered_transcript.to_json,
+          max_chapters: regeneration_max_chapters,
           review_feedback: review_data
         )
         chapters = parse_llm_json_response(regeneration_response)
