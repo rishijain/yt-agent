@@ -30,6 +30,7 @@ class VideosController < ApplicationController
   def chapters
     video_id = params[:video_id]
     language = params[:language] || 'en'
+    video_title = params[:title]
 
     if video_id.blank?
       return render json: { error: 'video_id is required' }, status: :bad_request
@@ -39,8 +40,7 @@ class VideosController < ApplicationController
       # Fetch transcript data
       transcript_data = fetch_transcript(video_id, language)
 
-      # Extract title and filter transcript for LLM
-      video_title = transcript_data.is_a?(Hash) ? transcript_data['title'] : nil
+      # Filter transcript for LLM (use title from query params if provided)
       filtered_transcript = filter_transcript_for_chapters(transcript_data)
 
       # Generate and review chapters with iterative improvement (let LLM determine optimal chapter count)
@@ -102,6 +102,21 @@ class VideosController < ApplicationController
                         transcript_data
 
       if transcript_array.is_a?(Array)
+        # Calculate actual video duration
+        if transcript_array.any?
+          last_segment = transcript_array.last
+          if last_segment.is_a?(Hash)
+            actual_duration = (last_segment['start'].to_f + (last_segment['duration']&.to_f || 0))
+            # Only include segments that are within the video duration
+            # Add a small buffer (5 seconds) to account for any timing variations
+            max_allowed_time = actual_duration + 5
+            filtered_array = transcript_array.select { |segment| 
+              segment.is_a?(Hash) && segment['start'].to_f <= max_allowed_time 
+            }
+            Rails.logger.info "Filtered transcript: #{transcript_array.length} segments -> #{filtered_array.length} segments (max time: #{max_allowed_time}s)"
+            return filtered_array
+          end
+        end
         return transcript_array
       end
     end

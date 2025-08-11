@@ -17,7 +17,7 @@ class Agent::Prompt
       with "start" (seconds) and "text" fields with the language of the video.
 
       #{video_title ? "Video Title: \"#{video_title}\"" : ""}
-      #{duration_display ? "IMPORTANT: This video is exactly #{duration_display} long (#{actual_duration} seconds). Make sure the total duration of chapters is not more than the #{duration_minutes} minutes." : ""}
+      #{duration_display ? "Video Duration: #{duration_display} (#{actual_duration} seconds)" : ""}
 
       Your job: Split it into YouTube chapters based on MAJOR themes and content sections. Focus on:
       - Identifying significant topic changes and major content themes
@@ -58,6 +58,7 @@ class Agent::Prompt
         {"name": "Introduction", "timestamp": "00:00", "start_seconds": 0},
         {"name": "Main Topic", "timestamp": "02:30", "start_seconds": 150}
       ]
+
 
       The output should be a JSON array of objects with "name", "timestamp", and "start_seconds" fields.
     PROMPT
@@ -134,7 +135,7 @@ class Agent::Prompt
       The chapters should be concise, engaging, and accurately reflect the content.
 
       #{video_title ? "Video Title: \"#{video_title}\"" : ""}
-      #{duration_display ? "IMPORTANT: This video is exactly #{duration_display} long (#{actual_duration} seconds). Make sure the total duration of chapters is not more than the #{duration_minutes} minutes." : ""}
+      #{duration_display ? "Video Duration: #{duration_display} (#{actual_duration} seconds)" : ""}
 
 
       ORIGINAL TRANSCRIPT:
@@ -187,6 +188,7 @@ class Agent::Prompt
         {"name": "Introduction", "timestamp": "00:00", "start_seconds": 0},
         {"name": "Main Topic", "timestamp": "02:30", "start_seconds": 150}
       ]
+
 
       The output should be a JSON array of objects with "name", "timestamp", and "start_seconds" fields.
     PROMPT
