@@ -39,16 +39,13 @@ class VideosController < ApplicationController
       # Fetch transcript data
       transcript_data = fetch_transcript(video_id, language)
 
-      # Filter and prepare data for LLM
+      # Extract title and filter transcript for LLM
+      video_title = transcript_data.is_a?(Hash) ? transcript_data['title'] : nil
       filtered_transcript = filter_transcript_for_chapters(transcript_data)
 
-      # Calculate video duration and determine chapter limit
-      video_duration = calculate_video_duration(filtered_transcript)
-      max_chapters = calculate_max_chapters(video_duration)
-
-      # Generate and review chapters with iterative improvement
+      # Generate and review chapters with iterative improvement (let LLM determine optimal chapter count)
       agent = Agent::Transcript.new
-      chapters, final_review = generate_chapters_with_review(agent, filtered_transcript, max_chapters)
+      chapters, final_review = generate_chapters_with_review(agent, filtered_transcript, video_title)
 
       render json: {
         video_id: video_id,
@@ -166,38 +163,14 @@ class VideosController < ApplicationController
     fixed_chapter
   end
 
-  def calculate_video_duration(transcript_array)
-    return 0 unless transcript_array.is_a?(Array) && transcript_array.any?
 
-    # Find the last segment and calculate total duration
-    last_segment = transcript_array.last
-    return 0 unless last_segment.is_a?(Hash)
-
-    # Total duration = start time of last segment + duration of last segment
-    last_start = last_segment['start'].to_f
-    last_duration = last_segment['duration'].to_f
-
-    last_start + last_duration
-  end
-
-  def calculate_max_chapters(video_duration_seconds)
-    # Rule: 10 chapters per 30 minutes (1800 seconds)
-    # Formula: (duration / 1800) * 10, rounded up to ensure we don't go below the minimum
-    return 10 if video_duration_seconds <= 1800 # Maximum 10 chapters for videos up to 30 mins
-
-    chapters_per_30_min = 10
-    thirty_minutes = 1800
-
-    (video_duration_seconds / thirty_minutes * chapters_per_30_min).ceil
-  end
-
-  def generate_chapters_with_review(agent, filtered_transcript, max_chapters)
+  def generate_chapters_with_review(agent, filtered_transcript, video_title = nil)
     max_attempts = 1
     current_attempt = 1
 
     # Initial chapter generation
     begin
-      chapters_response = agent.chat_with_prompt(:analysis, filtered_transcript.to_json, max_chapters: max_chapters)
+      chapters_response = agent.chat_with_prompt(:analysis, filtered_transcript.to_json, video_title: video_title)
       chapters = parse_llm_json_response(chapters_response)
     rescue => llm_error
       Rails.logger.error "LLM call failed: #{llm_error.message}"
@@ -208,7 +181,7 @@ class VideosController < ApplicationController
     while current_attempt <= max_attempts
       begin
         Rails.logger.info "Review attempt #{current_attempt}: transcript type=#{filtered_transcript.to_json.class}, chapters type=#{chapters.to_json.class}"
-        review_response = agent.chat_with_prompt(:review, filtered_transcript.to_json, generated_chapters: chapters.to_json)
+        review_response = agent.chat_with_prompt(:review, filtered_transcript.to_json, generated_chapters: chapters.to_json, video_title: video_title)
         review_data = parse_review_json_response(review_response)
       rescue => review_error
         Rails.logger.error "Chapter review failed (attempt #{current_attempt}): #{review_error.message}"
@@ -233,20 +206,13 @@ class VideosController < ApplicationController
 
       # Regenerate chapters based on review feedback
       # Use reviewer's recommended chapter count if provided, otherwise keep original limit
-      recommended_count = review_data["recommended_chapter_count"]
-      regeneration_max_chapters = recommended_count || max_chapters
-
-      if recommended_count && recommended_count != max_chapters
-        Rails.logger.info "Reviewer recommended #{recommended_count} chapters (was #{max_chapters})"
-      end
-
-      Rails.logger.info "Regenerating chapters (attempt #{current_attempt + 1}/#{max_attempts}) with max #{regeneration_max_chapters} chapters"
+      Rails.logger.info "Regenerating chapters (attempt #{current_attempt + 1}/#{max_attempts}) based on thematic organization"
       begin
         regeneration_response = agent.chat_with_prompt(
           :regeneration,
           filtered_transcript.to_json,
-          max_chapters: regeneration_max_chapters,
-          review_feedback: review_data
+          review_feedback: review_data,
+          video_title: video_title
         )
         chapters = parse_llm_json_response(regeneration_response)
       rescue => regeneration_error

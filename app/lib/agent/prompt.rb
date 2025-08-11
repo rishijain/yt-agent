@@ -1,7 +1,5 @@
 class Agent::Prompt
-  def self.analysis_prompt(content, max_chapters = nil, video_duration = nil)
-    chapter_limit_instruction = max_chapters ? "Generate a maximum of #{max_chapters} chapters." : ""
-    
+  def self.analysis_prompt(content, max_chapters = nil, video_title = nil)
     # Parse content to find actual video duration
     parsed_content = JSON.parse(content) rescue []
     if parsed_content.is_a?(Array) && parsed_content.any?
@@ -17,22 +15,29 @@ class Agent::Prompt
       You also understand the nuances of video content and audience engagement.
       You are given a full transcript of a video as a JSON array of objects
       with "start" (seconds) and "text" fields with the language of the video.
-      
-      #{duration_display ? "IMPORTANT: This video is exactly #{duration_display} long (#{actual_duration} seconds). DO NOT create any chapters beyond this duration." : ""}
 
-      Your job: Split it into YouTube chapters. Each chapter should have:
-      - "name": a short, purely descriptive title (never "undefined")
+      #{video_title ? "Video Title: \"#{video_title}\"" : ""}
+      #{duration_display ? "IMPORTANT: This video is exactly #{duration_display} long (#{actual_duration} seconds). Make sure the total duration of chapters is not more than the #{duration_minutes} minutes." : ""}
+
+      Your job: Split it into YouTube chapters based on MAJOR themes and content sections. Focus on:
+      - Identifying significant topic changes and major content themes
+      - Creating chapters that represent substantial content blocks, not minute details
+      - Ensuring each chapter represents a meaningful segment that viewers would want to navigate to
+      - Aim for chapters that are typically 3-10 minutes long for good user experience
+      #{video_title ? "- Use the video title as context to create chapter names that align with the overall theme" : ""}
+
+      Each chapter should have:
+      - "name": a short, purely descriptive title reflecting the main theme (never "undefined")
       - "timestamp": convert the "start" seconds value to mm:ss format (e.g., if start is 125 seconds, timestamp should be "02:05")
       - "start_seconds": the exact start time in seconds from the transcript (must match the "start" value from transcript data)
 
-      #{chapter_limit_instruction}
-
       CRITICAL: Ensure timestamp accuracy by:
-      1. Using EXACT "start" values from the transcript data for "start_seconds"
+      1. Using EXACT "start" values from the transcript data for "start_seconds" - DO NOT invent timestamps
       2. Converting start_seconds accurately to mm:ss format for "timestamp"
       3. Analyzing the transcript content at specific timestamps to ensure chapters match the actual content timing
       4. Each chapter should represent content that actually occurs at that timestamp in the video
-      
+      5. ONLY use start_seconds values that exist in the provided transcript array - never exceed the video length
+
       Rules for timestamp conversion:
       - Convert seconds to minutes and seconds precisely
       - Format as "mm:ss" (e.g., "00:00", "01:30", "15:42")
@@ -58,9 +63,11 @@ class Agent::Prompt
     PROMPT
   end
 
-  def self.review_prompt(original_transcript, generated_chapters)
+  def self.review_prompt(original_transcript, generated_chapters, video_title = nil)
     <<~PROMPT
       You are an expert video content analyst reviewing automatically generated YouTube chapters.
+
+      #{video_title ? "Video Title: \"#{video_title}\"" : ""}
 
       ORIGINAL TRANSCRIPT:
       #{original_transcript}
@@ -76,6 +83,7 @@ class Agent::Prompt
       3. Chapter distribution - Are chapters well-spaced and logical?
       4. Naming quality - Are chapter names descriptive and useful?
       5. Missing segments - Are there important content sections without chapters?
+      #{video_title ? "6. Title alignment - Do chapter names align with the overall theme indicated by the video title?" : ""}
 
       Output format (JSON only):
       {
@@ -106,11 +114,11 @@ class Agent::Prompt
     PROMPT
   end
 
-  def self.regeneration_prompt(content, max_chapters, review_feedback)
-    chapter_limit_instruction = max_chapters ? "Generate a maximum of #{max_chapters} chapters." : ""
+  def self.regeneration_prompt(content, max_chapters, review_feedback, video_title = nil)
+    # Remove rigid chapter limit, focus on thematic organization
     issues = review_feedback['issues_found'] || []
     suggestions = review_feedback['suggestions'] || {}
-    
+
     # Parse content to find actual video duration
     parsed_content = JSON.parse(content) rescue []
     if parsed_content.is_a?(Array) && parsed_content.any?
@@ -124,8 +132,10 @@ class Agent::Prompt
     <<~PROMPT
       You are regenerating YouTube chapters based on expert review feedback.
       The chapters should be concise, engaging, and accurately reflect the content.
-      
-      #{duration_display ? "IMPORTANT: This video is exactly #{duration_display} long (#{actual_duration} seconds). DO NOT create any chapters beyond this duration." : ""}
+
+      #{video_title ? "Video Title: \"#{video_title}\"" : ""}
+      #{duration_display ? "IMPORTANT: This video is exactly #{duration_display} long (#{actual_duration} seconds). Make sure the total duration of chapters is not more than the #{duration_minutes} minutes." : ""}
+
 
       ORIGINAL TRANSCRIPT:
       #{content}
@@ -141,19 +151,25 @@ class Agent::Prompt
 
       Regeneration Guidance: #{suggestions['regeneration_guidance']}
 
-      Your job: Create improved YouTube chapters addressing the feedback above. Each chapter should have:
-      - "name": a short, purely descriptive title (never "undefined")
+      Your job: Create improved YouTube chapters addressing the feedback above. Focus on MAJOR themes and content sections:
+      - Identify significant topic changes and major content themes
+      - Create chapters that represent substantial content blocks, not minute details
+      - Ensure each chapter represents a meaningful segment that viewers would want to navigate to
+      - Aim for chapters that are typically 3-10 minutes long for good user experience
+      #{video_title ? "- Use the video title as context to create chapter names that align with the overall theme" : ""}
+
+      Each chapter should have:
+      - "name": a short, purely descriptive title reflecting the main theme (never "undefined")
       - "timestamp": convert the "start" seconds value to mm:ss format (e.g., if start is 125 seconds, timestamp should be "02:05")
       - "start_seconds": the exact start time in seconds from the transcript (must match the "start" value from transcript data)
 
-      #{chapter_limit_instruction}
-
       CRITICAL: Ensure timestamp accuracy by:
-      1. Using EXACT "start" values from the transcript data for "start_seconds"
+      1. Using EXACT "start" values from the transcript data for "start_seconds" - DO NOT invent timestamps
       2. Converting start_seconds accurately to mm:ss format for "timestamp"
       3. Analyzing the transcript content at specific timestamps to ensure chapters match the actual content timing
       4. Each chapter should represent content that actually occurs at that timestamp in the video
-      
+      5. ONLY use start_seconds values that exist in the provided transcript array - never exceed the video length
+
       Rules for timestamp conversion:
       - Convert seconds to minutes and seconds precisely
       - Format as "mm:ss" (e.g., "00:00", "01:30", "15:42")
