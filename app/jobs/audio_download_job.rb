@@ -9,7 +9,15 @@ class AudioDownloadJob < ApplicationJob
 
       response_data = call_python_download_service(video_id)
 
-      update_job_status(job_tracking_id, 'completed', 'Audio download completed successfully', response_data)
+      update_job_status(job_tracking_id, 'audio_download_completed', 'Audio download completed successfully', response_data)
+
+      # Extract audio file path from response and trigger chapter generation
+      if response_data.is_a?(Hash) && response_data['path']
+        Rails.logger.info "Triggering chapter generation for video: #{video_id} (job: #{job_tracking_id})"
+        ChapterGenerationJob.perform_later(video_id, job_tracking_id, response_data['path'])
+      else
+        Rails.logger.warn "No audio file path found in response, skipping chapter generation"
+      end
 
       Rails.logger.info "Audio download completed for video: #{video_id} (job: #{job_tracking_id})"
     rescue => e

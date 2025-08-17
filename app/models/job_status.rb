@@ -2,7 +2,7 @@ class JobStatus < ApplicationRecord
   validates :job_tracking_id, presence: true, uniqueness: true
   validates :status, presence: true
   
-  VALID_STATUSES = %w[queued processing completed failed].freeze
+  VALID_STATUSES = %w[queued processing audio_download_completed chapter_generation_processing completed failed].freeze
   validates :status, inclusion: { in: VALID_STATUSES }
   
   scope :by_status, ->(status) { where(status: status) }
@@ -33,5 +33,13 @@ class JobStatus < ApplicationRecord
   
   def failed?
     status == 'failed'
+  end
+  
+  def audio_download_completed?
+    status == 'audio_download_completed'
+  end
+  
+  def chapter_generation_processing?
+    status == 'chapter_generation_processing'
   end
 end
