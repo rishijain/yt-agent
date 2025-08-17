@@ -13,6 +13,10 @@ Rails.application.routes.draw do
   get "videos/:video_id/chapters/:language", to: "videos#chapters"
   get "videos/:video_id/chapters", to: "videos#chapters"
 
+  # Video download audio background job APIs
+  post "videos/download-audio", to: "videos#enqueue_download"
+  get "videos/download-audio/:job_id/status", to: "videos#download_status"
+
   # Defines the root path route ("/")
   # root "posts#index"
 end

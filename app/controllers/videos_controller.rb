@@ -68,6 +68,76 @@ class VideosController < ApplicationController
     end
   end
 
+  def enqueue_download
+    video_id = params[:video_id]
+
+    if video_id.blank?
+      return render json: { error: 'video_id is required' }, status: :bad_request
+    end
+
+    begin
+      job_tracking_id = SecureRandom.uuid
+
+      # Initialize job status
+      JobStatus.create!(
+        job_tracking_id: job_tracking_id,
+        status: 'queued',
+        message: 'Audio download job has been queued',
+        video_id: video_id
+      )
+
+      # Enqueue the background job
+      AudioDownloadJob.perform_later(video_id, job_tracking_id)
+
+      render json: {
+        job_id: job_tracking_id,
+        status: 'queued',
+        message: 'Audio download job has been queued successfully'
+      }
+    rescue => e
+      Rails.logger.error "Error enqueuing download job: #{e.message}"
+      render json: {
+        error: 'Failed to enqueue download job',
+        message: e.message
+      }, status: :internal_server_error
+    end
+  end
+
+  def download_status
+    job_id = params[:job_id]
+
+    if job_id.blank?
+      return render json: { error: 'job_id is required' }, status: :bad_request
+    end
+
+    begin
+      job_status = JobStatus.find_by(job_tracking_id: job_id)
+
+      if job_status.nil?
+        return render json: {
+          error: 'Job not found',
+          message: 'The specified job ID was not found'
+        }, status: :not_found
+      end
+
+      render json: {
+        job_id: job_id,
+        status: job_status.status,
+        message: job_status.message,
+        video_id: job_status.video_id,
+        data: job_status.data_json,
+        created_at: job_status.created_at,
+        updated_at: job_status.updated_at
+      }
+    rescue => e
+      Rails.logger.error "Error checking job status: #{e.message}"
+      render json: {
+        error: 'Failed to check job status',
+        message: e.message
+      }, status: :internal_server_error
+    end
+  end
+
   private
 
   def fetch_transcript(video_id, language)
@@ -84,6 +154,7 @@ class VideosController < ApplicationController
   rescue JSON::ParserError
     response.body
   end
+
 
   def filter_transcript_for_chapters(transcript_data)
     # If transcript_data is already an array of objects with 'start' and 'text' fields, use as is
@@ -110,8 +181,8 @@ class VideosController < ApplicationController
             # Only include segments that are within the video duration
             # Add a small buffer (5 seconds) to account for any timing variations
             max_allowed_time = actual_duration + 5
-            filtered_array = transcript_array.select { |segment| 
-              segment.is_a?(Hash) && segment['start'].to_f <= max_allowed_time 
+            filtered_array = transcript_array.select { |segment|
+              segment.is_a?(Hash) && segment['start'].to_f <= max_allowed_time
             }
             Rails.logger.info "Filtered transcript: #{transcript_array.length} segments -> #{filtered_array.length} segments (max time: #{max_allowed_time}s)"
             return filtered_array
@@ -138,7 +209,7 @@ class VideosController < ApplicationController
 
     # Parse the cleaned JSON
     chapters = JSON.parse(cleaned_response.strip)
-    
+
     # Validate and fix each chapter, mapping to nearest valid timestamps
     chapters.map do |chapter|
       validate_and_fix_chapter(chapter, transcript_data)
@@ -168,18 +239,18 @@ class VideosController < ApplicationController
       original_start = fixed_chapter['start_seconds'].to_f
       valid_timestamps = transcript_data.map { |snippet| snippet['start'].to_f }.sort
       max_allowed = valid_timestamps.last
-      
+
       # If the LLM-generated timestamp exceeds video duration or is invalid
       if original_start > max_allowed || original_start < 0
         # Find the nearest valid timestamp
         nearest_timestamp = valid_timestamps.min_by { |t| (t - original_start).abs }
-        
+
         Rails.logger.info "Mapped invalid timestamp #{original_start}s to nearest valid #{nearest_timestamp}s for chapter '#{fixed_chapter['name']}'"
         fixed_chapter['start_seconds'] = nearest_timestamp
       else
         # Find the closest valid timestamp to the LLM's suggestion
         nearest_timestamp = valid_timestamps.min_by { |t| (t - original_start).abs }
-        
+
         # Only map if it's more than 5 seconds off (to avoid unnecessary changes)
         if (nearest_timestamp - original_start).abs > 5
           Rails.logger.info "Mapped approximate timestamp #{original_start}s to nearest valid #{nearest_timestamp}s for chapter '#{fixed_chapter['name']}'"
