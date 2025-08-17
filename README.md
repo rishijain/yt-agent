@@ -120,6 +120,7 @@ rails server
 - **solid_cache**: Database-backed Rails cache
 - **solid_queue**: Database-backed Active Job
 - **solid_cable**: Database-backed Action Cable
+- Command to start soliqueue: bin/jobs
 
 ## Health Check
 
