@@ -1,3 +1,4 @@
 .env
 /log/*
 config/master.key
+log/development.log
