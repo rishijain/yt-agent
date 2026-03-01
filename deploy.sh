@@ -19,5 +19,5 @@ bundle install
 echo "Running database migrations..."
 RAILS_ENV=production bin/rails db:migrate
 
-sudo systemctl restart puma
+sudo systemctl restart puma-yt-agent
 echo "Restarted Puma"
