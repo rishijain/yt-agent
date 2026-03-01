@@ -37,7 +37,7 @@ gem "thruster", require: false
 
 # AI/LLM integration
 gem "langchainrb"
-gem "ruby-openai"
+gem "anthropic"
 
 # Environment variables
 gem "dotenv-rails"
