@@ -13,7 +13,7 @@ git pull origin main
 
 # Install/update dependencies
 echo "Installing dependencies..."
-bundle install --without development test
+bundle install
 
 # Run database migrations
 echo "Running database migrations..."
